@@ -1,0 +1,49 @@
+name: Build coreutils (ARM64)
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-coreutils.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repo
+        uses: actions/checkout@v4
+
+      - name: Instalar cross-compiler ARM64 y herramientas deb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y crossbuild-essential-arm64 wget dpkg-dev
+
+      - name: Descargar código fuente de coreutils
+        run: |
+          wget https://ftp.gnu.org/gnu/coreutils/coreutils-9.5.tar.gz
+          tar -xzf coreutils-9.5.tar.gz
+
+      - name: Compilar para ARM64
+        run: |
+          cd coreutils-9.5
+          ./configure --host=aarch64-linux-gnu --prefix=/data/data/com.mixmatrix/files/usr
+          make -j$(nproc)
+
+      - name: Armar paquete .deb (multi-binario)
+        run: bash scripts/make-deb-multi.sh coreutils 9.5 arm64 coreutils-9.5/src
+
+      - name: Publicar .deb en el repo
+        run: |
+          mkdir -p repo/packages
+          cp dist/*.deb repo/packages/
+
+      - name: Actualizar índice packages.json
+        run: bash scripts/update-index.sh coreutils 9.5 arm64
+
+      - name: Subir cambios al repo
+        run: |
+          git config user.name "mixmatrix-bot"
+          git config user.email "bot@mixmatrix.local"
+          git add repo/
+          git commit -m "Build: coreutils 9.5 arm64" || echo "Sin cambios que subir"
+          git push
